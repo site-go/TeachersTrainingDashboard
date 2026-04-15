@@ -11,7 +11,7 @@
             --bg: #f1f5f9; --white: #ffffff; --text: #1e293b;
         }
         body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); padding: 20px; color: var(--text); }
-        .container { max-width: 1450px; margin: 0 auto; background: var(--white); padding: 30px; border-radius: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.05); }
+        .container { max-width: 1550px; margin: 0 auto; background: var(--white); padding: 30px; border-radius: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.05); }
         
         .header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; }
         .source-switcher { display: flex; gap: 10px; background: #e2e8f0; padding: 5px; border-radius: 50px; margin-bottom: 20px; width: fit-content; }
@@ -29,7 +29,7 @@
         select, input { padding: 12px; border-radius: 10px; border: 1.5px solid #cbd5e1; outline: none; font-size: 0.85rem; }
 
         .table-wrapper { overflow-x: auto; border-radius: 12px; border: 1px solid #e2e8f0; }
-        table { width: 100%; border-collapse: collapse; min-width: 1000px; }
+        table { width: 100%; border-collapse: collapse; min-width: 1200px; }
         th { background: #f1f5f9; padding: 15px; text-align: left; font-size: 0.7rem; text-transform: uppercase; color: #475569; }
         td { padding: 15px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
         
@@ -45,8 +45,8 @@
 <div class="container">
     <div class="header-flex">
         <div>
-            <h2>Admin Master Panel</h2>
-            <p style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">Data Synchronization & Exporting</p>
+            <h2>Admin Master Panel v5.1</h2>
+            <p style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">Syncing Suffix, Gender, and Regional Data</p>
         </div>
         <div style="display: flex; gap: 10px;">
             <button onclick="fetchAllData()" class="btn-sync" id="syncBtn">🔄 Sync All</button>
@@ -55,13 +55,13 @@
     </div>
 
     <div class="source-switcher">
-        <button class="source-pill active" onclick="switchSource('original', this)">📁 ORIGINAL</button>
+        <button class="source-pill active" onclick="switchSource('original', this)">📁 MASTER</button>
         <button class="source-pill" onclick="switchSource('panay', this)">🏝️ PANAY</button>
         <button class="source-pill" onclick="switchSource('mindanao', this)">⛰️ MINDANAO</button>
     </div>
 
     <div class="stats-grid">
-        <div class="stat-card" id="card-original"><small>Original</small><h3 id="stat-orig-count">0</h3></div>
+        <div class="stat-card" id="card-original"><small>Master</small><h3 id="stat-orig-count">0</h3></div>
         <div class="stat-card" id="card-panay"><small>Panay</small><h3 id="stat-pan-count">0</h3></div>
         <div class="stat-card" id="card-mindanao"><small>Mindanao</small><h3 id="stat-min-count">0</h3></div>
     </div>
@@ -69,10 +69,10 @@
     <div class="controls">
         <div class="control-group">
             <label>Search Teacher</label>
-            <input type="text" id="searchInput" placeholder="Search..." onkeyup="applyFilters()">
+            <input type="text" id="searchInput" placeholder="Name or School..." onkeyup="applyFilters()">
         </div>
         <div class="control-group">
-            <label>Batch Selection</label>
+            <label>Batch</label>
             <select id="batchFilter" onchange="applyFilters()">
                 <option value="">All Batches</option>
                 <option value="batch1">Batch 1</option>
@@ -84,7 +84,7 @@
             </select>
         </div>
         <div class="control-group">
-            <label>Filter Day</label>
+            <label>Workshop Day</label>
             <select id="dayFilter" onchange="applyFilters()">
                 <option value="">All Days</option>
                 <option value="D1-">Day 1</option>
@@ -102,6 +102,7 @@
                 <tr>
                     <th>First Name</th>
                     <th>Last Name</th>
+                    <th>Gender</th>
                     <th>Institution</th>
                     <th>Province</th>
                     <th>Batch</th>
@@ -133,14 +134,16 @@
         return rows.slice(1).map(row => {
             const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/"/g, '').trim());
             return {
-                firstname: cols[headers.indexOf('firstname')],
-                lastname: cols[headers.indexOf('lastname')],
-                mi: cols[headers.indexOf('mi')],
-                dob: cols[headers.indexOf('dob')],
-                province: cols[headers.indexOf('province')],
-                institution: cols[headers.indexOf('institution')],
+                firstname: cols[headers.indexOf('firstname')] || '',
+                lastname: cols[headers.indexOf('lastname')] || '',
+                mi: cols[headers.indexOf('mi')] || '',
+                suffix: cols[headers.indexOf('suffix')] || '',
+                gender: cols[headers.indexOf('gender')] || '',
+                dob: cols[headers.indexOf('dob')] || '',
+                province: cols[headers.indexOf('province')] || '',
+                institution: cols[headers.indexOf('institution')] || '',
                 batch: (cols[headers.indexOf('schedule')] || '').toLowerCase().replace(/\s/g, ''),
-                workshop: cols[headers.indexOf('workshop')],
+                workshop: cols[headers.indexOf('workshop')] || '',
                 cluster: key
             };
         }).filter(d => d.firstname);
@@ -150,9 +153,14 @@
         const btn = document.getElementById('syncBtn');
         btn.innerText = "Syncing...";
         try {
-            datasets.original = await fetchCSV(URLS.original, 'original');
-            datasets.panay = await fetchCSV(URLS.panay, 'panay');
-            datasets.mindanao = await fetchCSV(URLS.mindanao, 'mindanao');
+            const results = await Promise.all([
+                fetchCSV(URLS.original, 'original'),
+                fetchCSV(URLS.panay, 'panay'),
+                fetchCSV(URLS.mindanao, 'mindanao')
+            ]);
+            datasets.original = results[0];
+            datasets.panay = results[1];
+            datasets.mindanao = results[2];
 
             document.getElementById('stat-orig-count').innerText = datasets.original.length;
             document.getElementById('stat-pan-count').innerText = datasets.panay.length;
@@ -179,38 +187,43 @@
         const tbody = document.getElementById('tableBody');
         
         filteredData = datasets[activeSource].filter(d => {
-            const matchesSearch = d.firstname.toLowerCase().includes(search) || d.lastname.toLowerCase().includes(search) || d.institution.toLowerCase().includes(search);
+            const fullName = (d.firstname + ' ' + d.lastname).toLowerCase();
+            const matchesSearch = fullName.includes(search) || d.institution.toLowerCase().includes(search);
             const matchesBatch = batch === "" || d.batch === batch;
             const matchesDay = day === "" || d.workshop.toUpperCase().includes(day.toUpperCase());
             return matchesSearch && matchesBatch && matchesDay;
         });
 
-        tbody.innerHTML = filteredData.map(d => `
+        tbody.innerHTML = filteredData.map(d => {
+            const displaySuffix = (d.suffix && d.suffix !== "None") ? ` ${d.suffix}` : "";
+            return `
             <tr>
                 <td>${d.firstname}</td>
-                <td>${d.lastname}</td>
+                <td>${d.lastname}${displaySuffix}</td>
+                <td><small>${d.gender}</small></td>
                 <td>${d.institution}</td>
                 <td>${d.province}</td>
                 <td><span style="color:var(--primary); font-weight:800">${d.batch.toUpperCase()}</span></td>
                 <td><span class="tag tag-${d.cluster}">${d.cluster}</span></td>
             </tr>
-        `).join('');
+            `;
+        }).join('');
     }
 
     function exportToCSV() {
         if (filteredData.length === 0) return alert("No data to export.");
         
-        // Custom column order: First Name, Last Name, Middle I, DOB, Province, Institution
-        let csv = "\ufeffFirst Name,Last Name,Middle I,Date of Birth,Province,Institution\n";
+        // CSV Order: First Name, Last Name, Suffix, Middle I, Gender, DOB, Province, Institution
+        let csv = "\ufeffFirst Name,Last Name,Suffix,Middle I,Gender,Date of Birth,Province,Institution\n";
         
         filteredData.forEach(d => {
-            csv += `"${d.firstname}","${d.lastname}","${d.mi}","${d.dob}","${d.province}","${d.institution}"\n`;
+            csv += `"${d.firstname}","${d.lastname}","${d.suffix}","${d.mi}","${d.gender}","${d.dob}","${d.province}","${d.institution}"\n`;
         });
 
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `Teachers_Export_${activeSource}_${new Date().toISOString().slice(0,10)}.csv`;
+        link.download = `Teachers_Master_Export_${activeSource}_${new Date().toISOString().slice(0,10)}.csv`;
         link.click();
     }
 
