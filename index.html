@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Master Admin Dashboard v5.3 | Regional Clusters</title>
+    <title>Master Admin Dashboard v5.3 | Strict Unique Filter</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -15,7 +15,6 @@
         
         .header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px; }
         
-        /* Batch Summary Styles */
         .batch-summary { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
         .batch-badge { background: #e2e8f0; padding: 8px 15px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; border: 1px solid #cbd5e1; display: flex; align-items: center; gap: 5px; }
         .batch-badge span { color: var(--text); font-weight: 800; }
@@ -56,7 +55,7 @@
     <div class="header-flex">
         <div>
             <h2>Admin Master Panel v5.3</h2>
-            <p style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">B3: Panay | B4: Mindanao Enforcement</p>
+            <p style="font-size: 0.8rem; color: #64748b; margin-top: 5px;">Strict Data Deduplication: 1 Entry per Individual</p>
         </div>
         <div style="display: flex; gap: 10px;">
             <button onclick="fetchAllData()" class="btn-sync" id="syncBtn">🔄 Sync All</button>
@@ -80,9 +79,9 @@
     </div>
 
     <div class="stats-grid">
-        <div class="stat-card" id="card-original"><small>Master</small><h3 id="stat-orig-count">0</h3></div>
-        <div class="stat-card" id="card-panay"><small>Panay (B3)</small><h3 id="stat-pan-count">0</h3></div>
-        <div class="stat-card" id="card-mindanao"><small>Mindanao (B4)</small><h3 id="stat-min-count">0</h3></div>
+        <div class="stat-card active-source" id="card-original"><small>Unique Master Entries</small><h3 id="stat-orig-count">0</h3></div>
+        <div class="stat-card" id="card-panay"><small>Unique Panay Entries</small><h3 id="stat-pan-count">0</h3></div>
+        <div class="stat-card" id="card-mindanao"><small>Unique Mindanao Entries</small><h3 id="stat-min-count">0</h3></div>
     </div>
 
     <div class="controls">
@@ -150,40 +149,57 @@
         const rows = text.split('\n').filter(r => r.trim() !== "");
         const headers = rows[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
         
-        return rows.slice(1).map(row => {
-            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/"/g, '').trim());
-            const rawBatch = (cols[headers.indexOf('schedule')] || '').toLowerCase().replace(/\s/g, '');
-            
-            // Logic Enforcement: Force Cluster based on Batch or Source
-            let assignedCluster = key;
-            if (rawBatch === 'batch3') assignedCluster = 'panay';
-            if (rawBatch === 'batch4') assignedCluster = 'mindanao';
+        // Use Map to ensure strictly 1 entry per person
+        const uniqueEntries = new Map();
 
-            return {
-                firstname: cols[headers.indexOf('firstname')] || '',
-                lastname: cols[headers.indexOf('lastname')] || '',
-                mi: cols[headers.indexOf('mi')] || '',
-                suffix: cols[headers.indexOf('suffix')] || '',
-                gender: cols[headers.indexOf('gender')] || '',
-                dob: cols[headers.indexOf('dob')] || '',
-                province: cols[headers.indexOf('province')] || '',
-                institution: cols[headers.indexOf('institution')] || '',
-                batch: rawBatch,
-                workshop: cols[headers.indexOf('workshop')] || '',
-                cluster: assignedCluster
-            };
-        }).filter(d => d.firstname);
+        rows.slice(1).forEach(row => {
+            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/"/g, '').trim());
+            
+            const fname = (cols[headers.indexOf('firstname')] || '').trim();
+            const lname = (cols[headers.indexOf('lastname')] || '').trim();
+            const inst = (cols[headers.indexOf('institution')] || '').trim();
+            const dob = (cols[headers.indexOf('dob')] || '').trim();
+            const prov = (cols[headers.indexOf('province')] || '').trim();
+            const rawBatch = (cols[headers.indexOf('schedule')] || '').toLowerCase().replace(/\s/g, '');
+
+            // STRICT UNIQUE KEY: Combination of Names + Institution + DOB
+            // This prevents duplicates if the same person is in the list twice
+            const uniqueId = `${fname}|${lname}|${inst}|${dob}|${prov}`.toLowerCase();
+
+            if (fname && !uniqueEntries.has(uniqueId)) {
+                let assignedCluster = key;
+                if (rawBatch === 'batch3') assignedCluster = 'panay';
+                if (rawBatch === 'batch4') assignedCluster = 'mindanao';
+
+                uniqueEntries.set(uniqueId, {
+                    firstname: fname,
+                    lastname: lname,
+                    mi: cols[headers.indexOf('mi')] || '',
+                    suffix: cols[headers.indexOf('suffix')] || '',
+                    gender: cols[headers.indexOf('gender')] || '',
+                    dob: dob,
+                    province: prov,
+                    institution: inst,
+                    batch: rawBatch,
+                    workshop: cols[headers.indexOf('workshop')] || '',
+                    cluster: assignedCluster
+                });
+            }
+        });
+
+        return Array.from(uniqueEntries.values());
     }
 
     async function fetchAllData() {
         const btn = document.getElementById('syncBtn');
-        btn.innerText = "Syncing...";
+        btn.innerText = "⚡ Processing...";
         try {
             const results = await Promise.all([
                 fetchCSV(URLS.original, 'original'),
                 fetchCSV(URLS.panay, 'panay'),
                 fetchCSV(URLS.mindanao, 'mindanao')
             ]);
+            
             datasets.original = results[0];
             datasets.panay = results[1];
             datasets.mindanao = results[2];
@@ -194,7 +210,10 @@
             
             applyFilters();
             btn.innerText = "🔄 Sync All";
-        } catch (e) { btn.innerText = "❌ Error"; }
+        } catch (e) { 
+            console.error(e);
+            btn.innerText = "❌ Error"; 
+        }
     }
 
     function switchSource(source, btn) {
@@ -216,12 +235,10 @@
             }
         });
 
-        document.getElementById('count-b1').innerText = counts.batch1;
-        document.getElementById('count-b2').innerText = counts.batch2;
-        document.getElementById('count-b3').innerText = counts.batch3;
-        document.getElementById('count-b4').innerText = counts.batch4;
-        document.getElementById('count-b5').innerText = counts.batch5;
-        document.getElementById('count-b6').innerText = counts.batch6;
+        Object.keys(counts).forEach(b => {
+            const el = document.getElementById(`count-${b.replace('batch', 'b')}`);
+            if(el) el.innerText = counts[b];
+        });
     }
 
     function applyFilters() {
@@ -266,10 +283,11 @@
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `Regional_Master_Export_${activeSource}_${new Date().toISOString().slice(0,10)}.csv`;
+        link.download = `Strict_Unique_Export_${activeSource}_${new Date().toISOString().slice(0,10)}.csv`;
         link.click();
     }
 
+    // Initial Load
     fetchAllData();
 </script>
 </body>
